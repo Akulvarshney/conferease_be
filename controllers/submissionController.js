@@ -71,5 +71,3 @@ const addNewSubmission = async (req, res) => {
 };
 
 module.exports = { addNewSubmission };
-
-module.exports = { addNewSubmission };

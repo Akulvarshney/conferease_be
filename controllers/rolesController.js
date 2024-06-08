@@ -2,6 +2,7 @@ const Role = require("../db/models/role");
 const bcrypt = require("bcrypt");
 const mongoose = require("mongoose");
 const formatResponse = require("../middleware/responseFormat");
+const userRoleConferMap = require("../db/models/userRoleConferMap");
 const ObjectId = mongoose.Types.ObjectId;
 
 const addNewRole = async (req, res) => {
@@ -31,6 +32,41 @@ const addNewRole = async (req, res) => {
   }
 };
 
+const rolesOfUser = async (req, res) => {
+  try {
+    const { conferenceId, userId } = req.query;
+
+    if (!conferenceId || !userId) {
+      return formatResponse(
+        res,
+        false,
+        null,
+        "Conference ID and User ID are required",
+        400
+      );
+    }
+
+    const userRoles = await userRoleConferMap
+      .find({
+        conferenceId,
+        userId,
+      })
+      .populate("roles");
+
+    formatResponse(
+      res,
+      true,
+      userRoles,
+      "User roles fetched successfully",
+      200
+    );
+  } catch (error) {
+    console.error("Error fetching user roles:", error);
+    formatResponse(res, false, null, "Internal Server Error", 500);
+  }
+};
+
 module.exports = {
   addNewRole,
+  rolesOfUser,
 };

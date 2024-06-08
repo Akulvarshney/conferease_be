@@ -1,5 +1,6 @@
 const User = require("../db/models/userSchema");
 const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
 const mongoose = require("mongoose");
 const formatResponse = require("../middleware/responseFormat");
 const ObjectId = mongoose.Types.ObjectId;
@@ -36,15 +37,65 @@ const emailRegistration = async (req, res) => {
     const newUser = new User({ email, password: hashedPassword });
 
     await newUser.save();
+
     return formatResponse(
       res,
       true,
       email,
       "User registered successfully",
-      400
+      200
     );
   } catch (error) {
     console.error("Error registering user:", error);
+    return formatResponse(res, false, null, "Internal Server Error", 500);
+  }
+};
+
+const login = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    const existingUser = await User.findOne({ email });
+    if (!existingUser) {
+      return formatResponse(res, false, null, "Invalid email or password", 401);
+    }
+
+    const isPasswordValid = await bcrypt.compare(
+      password,
+      existingUser.password
+    );
+    if (!isPasswordValid) {
+      return formatResponse(res, false, null, "Invalid email or password", 401);
+    }
+
+    const token = jwt.sign(
+      { userId: existingUser._id },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "1d",
+      }
+    );
+
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 24 * 60 * 60 * 1000,
+    });
+
+    const userData = {
+      _id: existingUser._id,
+      name: existingUser.name,
+      affiliation: existingUser.affiliation,
+    };
+
+    return res.status(200).json({
+      success: true,
+      data: userData,
+      token: token,
+      message: "Login successful",
+    });
+  } catch (error) {
+    console.error("Error logging in user:", error);
     return formatResponse(res, false, null, "Internal Server Error", 500);
   }
 };
@@ -81,4 +132,5 @@ module.exports = {
   checkEmail,
   emailRegistration,
   userRegistration,
+  login,
 };

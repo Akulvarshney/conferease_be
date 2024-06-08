@@ -61,15 +61,28 @@ const addNewConference = async (req, res) => {
 
 const allConferences = async (req, res) => {
   try {
-    let { page, limit } = req.query;
+    let { page, limit, search } = req.query;
 
     page = parseInt(page) || 1;
     limit = parseInt(limit) || 10;
+    search = search ? search.trim() : "";
 
     const skip = (page - 1) * limit;
 
-    const conferences = await Conference.find().skip(skip).limit(limit);
-    const totalConferences = await Conference.countDocuments();
+    let searchQuery = {};
+    if (search) {
+      searchQuery = {
+        $or: [
+          { name: { $regex: search, $options: "i" } },
+          { location: { $regex: search, $options: "i" } },
+        ],
+      };
+    }
+
+    const conferences = await Conference.find(searchQuery)
+      .skip(skip)
+      .limit(limit);
+    const totalConferences = await Conference.countDocuments(searchQuery);
 
     if (conferences.length > 0) {
       const totalPages = Math.ceil(totalConferences / limit);
@@ -94,7 +107,66 @@ const allConferences = async (req, res) => {
   }
 };
 
+const myConferences = async (req, res) => {
+  const { userId, page, limit, search } = req.query;
+
+  if (!userId) {
+    return formatResponse(res, false, null, "User ID is required", 400);
+  }
+
+  let pageNumber = parseInt(page) || 1;
+  let limitNumber = parseInt(limit) || 10;
+  let searchString = search ? search.trim() : "";
+  const skip = (pageNumber - 1) * limitNumber;
+
+  try {
+    let searchQuery = { userId };
+    if (searchString) {
+      searchQuery.$or = [
+        { "conferenceId.name": { $regex: searchString, $options: "i" } },
+        { "conferenceId.location": { $regex: searchString, $options: "i" } },
+      ];
+    }
+
+    const userRoles = await UserRole.find(searchQuery)
+      .populate("conferenceId")
+      .skip(skip)
+      .limit(limitNumber);
+
+    if (userRoles.length === 0) {
+      return formatResponse(
+        res,
+        false,
+        null,
+        "No conferences found for this user",
+        404
+      );
+    }
+
+    const conferences = userRoles.map((userRole) => userRole.conferenceId);
+    const totalConferences = await UserRole.countDocuments(searchQuery);
+    const totalPages = Math.ceil(totalConferences / limitNumber);
+
+    return formatResponse(
+      res,
+      true,
+      {
+        conferences,
+        totalPages,
+        currentPage: pageNumber,
+        totalConferences,
+      },
+      "Conferences retrieved successfully",
+      200
+    );
+  } catch (error) {
+    console.error("Error fetching conferences:", error);
+    return formatResponse(res, false, null, "Internal Server Error", 500);
+  }
+};
+
 module.exports = {
   addNewConference,
   allConferences,
+  myConferences,
 };
